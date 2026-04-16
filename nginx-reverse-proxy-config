@@ -1,12 +1,7 @@
-upstream myapp {
-    server localhost:8081;  # ❌ BLUE disabled
-    server localhost:8082 down;       # ✅ GREEN active
-}
-
 server {
     listen 80;
 
     location / {
-        proxy_pass http://myapp;
+        proxy_pass http://localhost:8081;
     }
 }
