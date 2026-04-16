@@ -1,0 +1,33 @@
+name: Deploy via SSM (No SSH)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Run commands on EC2 using SSM
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy latest code" \
+            --parameters commands='[
+              "cd /home/ubuntu || exit",
+              "if [ ! -d blue-green-Deployment ]; then git clone https://github.com/Madhan1417/blue-green-Deployment.git; fi",
+              "cd blue-green-Deployment",
+              "git fetch origin",
+              "git reset --hard origin/main"
+            ]' \
+            --region ${{ secrets.AWS_REGION }}
