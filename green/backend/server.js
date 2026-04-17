@@ -4,7 +4,7 @@ const app = express();
 // API route
 app.get('/api/message', (req, res) => {
     res.json({
-        message: "Hello from backend 🚀",
+        message: "Hello from backend I'am madhan🚀",
         time: new Date().toLocaleString()
     });
 });
