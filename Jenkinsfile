@@ -3,19 +3,31 @@ pipeline {
 
     environment {
         NETWORK = "app-net"
-        BACKEND_IMAGE = "green-backend"
-        FRONTEND_IMAGE = "green-frontend"
-        BACKEND_CONTAINER = "green-backend"
-        FRONTEND_CONTAINER = "green-frontend"
+
+        BACKEND_IMAGE_BLUE = "blue-backend"
+        FRONTEND_IMAGE_BLUE = "blue-frontend"
+
+        BACKEND_IMAGE_GREEN = "green-backend"
+        FRONTEND_IMAGE_GREEN = "green-frontend"
+
+        ACTIVE_SLOT = "green"   // change to blue for rollback
+
+        BACKEND_CONTAINER = "backend-${ACTIVE_SLOT}"
+        FRONTEND_CONTAINER = "frontend-${ACTIVE_SLOT}"
+
         FRONTEND_PORT = "8090"
         BACKEND_PORT = "3000"
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout (Clean Pull)') {
             steps {
-                checkout scm
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[url: 'https://github.com/Madhan1417/blue-green.git']],
+                    extensions: [[$class: 'CleanBeforeCheckout']]
+                ])
             }
         }
 
@@ -23,7 +35,7 @@ pipeline {
             steps {
                 sh """
                 cd green/backend
-                docker build --no-cache -t ${BACKEND_IMAGE} .
+                docker build --no-cache -t ${BACKEND_IMAGE_GREEN} .
                 """
             }
         }
@@ -32,12 +44,12 @@ pipeline {
             steps {
                 sh """
                 cd green/frontend
-                docker build --no-cache -t ${FRONTEND_IMAGE} .
+                docker build --no-cache -t ${FRONTEND_IMAGE_GREEN} .
                 """
             }
         }
 
-        stage('Network Setup') {
+        stage('Create Network') {
             steps {
                 sh """
                 docker network inspect ${NETWORK} >/dev/null 2>&1 || \
@@ -46,37 +58,50 @@ pipeline {
             }
         }
 
-        stage('Cleanup Containers') {
+        stage('Stop Old Container') {
             steps {
                 sh """
-                docker rm -f ${BACKEND_CONTAINER} || true
-                docker rm -f ${FRONTEND_CONTAINER} || true
+                docker rm -f backend-green frontend-green || true
+                docker rm -f backend-blue frontend-blue || true
                 """
             }
         }
 
-        stage('Run Backend') {
+        stage('Deploy GREEN') {
             steps {
                 sh """
                 docker run -d \
-                --name ${BACKEND_CONTAINER} \
+                --name backend-green \
                 --network ${NETWORK} \
                 -p ${BACKEND_PORT}:3000 \
-                ${BACKEND_IMAGE}
+                ${BACKEND_IMAGE_GREEN}
+
+                docker run -d \
+                --name frontend-green \
+                --network ${NETWORK} \
+                -p ${FRONTEND_PORT}:80 \
+                ${FRONTEND_IMAGE_GREEN}
                 """
             }
         }
 
-        stage('Run Frontend') {
+        stage('Health Check') {
             steps {
                 sh """
-                docker run -d \
-                --name ${FRONTEND_CONTAINER} \
-                --network ${NETWORK} \
-                -p ${FRONTEND_PORT}:80 \
-                ${FRONTEND_IMAGE}
+                curl -f http://localhost:3000/api/message
+                curl -f http://localhost:8090
                 """
             }
+        }
+    }
+
+    post {
+        success {
+            echo "🚀 DEPLOYMENT SUCCESSFUL (GREEN ACTIVE)"
+        }
+
+        failure {
+            echo "❌ DEPLOYMENT FAILED"
         }
     }
 }
