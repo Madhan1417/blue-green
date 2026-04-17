@@ -1,4 +1,4 @@
-name: Blue-Green Deployment (Auto Sync + Clean Rebuild)
+name: Blue-Green Deployment (Full Automation)
 
 on:
   push:
@@ -17,64 +17,58 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
+
+            echo "🚀 Starting Deployment..."
+
             cd /home/ubuntu/blue-green
 
-            echo "🔄 Syncing latest code from GitHub..."
-            git fetch origin
+            echo "🔄 Force syncing latest code from GitHub..."
+            git fetch --all
             git reset --hard origin/main
+            git clean -fd
 
-            echo "📌 Latest commit:"
+            echo "📌 Latest commit on EC2:"
             git log -1
 
-            # 🔥 IMPORTANT FIX: Sync root code into both environments
-            echo "📁 Updating blue & green folders..."
+            # =========================
+            # 🔵 BUILD BLUE
+            # =========================
+            echo "🔵 Rebuilding BLUE environment..."
 
-            cp -r index.html blue/index.html
-            cp -r index.html green/index.html
+            cd /home/ubuntu/blue-green/blue
 
-            # (If you have multiple files, use this instead)
-            # cp -r * blue/
-            # cp -r * green/
+            docker rm -f blue-container 2>/dev/null || echo "No old blue container"
+            docker rmi blue-app 2>/dev/null || echo "No old blue image"
 
-            # 🔍 Detect active environment from nginx
-            CURRENT=$(grep "proxy_pass" /etc/nginx/sites-enabled/default)
+            docker build --no-cache -t blue-app .
+            docker run -d -p 8081:80 --name blue-container blue-app
 
-            if echo "$CURRENT" | grep -q "8081"; then
-                TARGET_ENV="green"
-                PORT=8082
-                CONTAINER="green-container"
-                IMAGE="green-app"
-                FOLDER="green"
-            else
-                TARGET_ENV="blue"
-                PORT=8081
-                CONTAINER="blue-container"
-                IMAGE="blue-app"
-                FOLDER="blue"
-            fi
+            echo "✅ BLUE deployed"
 
-            echo "🚀 Deploying to $TARGET_ENV on port $PORT..."
+            # =========================
+            # 🟢 BUILD GREEN
+            # =========================
+            echo "🟢 Rebuilding GREEN environment..."
 
-            cd "$FOLDER"
+            cd /home/ubuntu/blue-green/green
 
-            # 🧹 Remove old container & image
-            docker rm -f "$CONTAINER" 2>/dev/null || echo "No old container"
-            docker rmi "$IMAGE" 2>/dev/null || echo "No old image"
+            docker rm -f green-container 2>/dev/null || echo "No old green container"
+            docker rmi green-app 2>/dev/null || echo "No old green image"
 
-            # 🏗️ Build fresh image (NO CACHE)
-            docker build --no-cache -t "$IMAGE" .
+            docker build --no-cache -t green-app .
+            docker run -d -p 8082:80 --name green-container green-app
 
-            # ▶️ Run container
-            docker run -d -p "$PORT":80 --name "$CONTAINER" "$IMAGE"
+            echo "✅ GREEN deployed"
 
-            echo "🔁 Ensuring both environments are running..."
+            # =========================
+            # 🔍 FINAL VERIFICATION
+            # =========================
+            echo "📊 Running containers:"
+            docker ps
 
-            # Ensure blue is running
-            docker ps --format '{{.Names}}' | grep -q "^blue-container$" || \
-              docker run -d -p 8081:80 --name blue-container blue-app || true
+            echo "🌐 Testing endpoints:"
+            curl -s http://localhost:8081 | head -n 5
+            curl -s http://localhost:8082 | head -n 5
 
-            # Ensure green is running
-            docker ps --format '{{.Names}}' | grep -q "^green-container$" || \
-              docker run -d -p 8082:80 --name green-container green-app || true
-
-            echo "✅ Deployment completed successfully"
+            echo "🎉 Deployment completed successfully!"
