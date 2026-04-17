@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wanderlust | Explore the World!!</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600&display=swap" rel="stylesheet">
+
+    <style>
+        body { margin: 0; font-family: 'Poppins', sans-serif; background: #f4f4f4; }
+
+        header {
+            height: 60vh;
+            background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
+                        url('https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1350&q=80');
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+        }
+
+        .container {
+            padding: 50px 20px;
+            max-width: 1000px;
+            margin: auto;
+            text-align: center;
+        }
+
+        .btn {
+            background: #ff4b2b;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: bold;
+        }
+
+        .grid {
+            display: flex;
+            gap: 20px;
+            margin-top: 40px;
+            flex-wrap: wrap;
+        }
+
+        .card {
+            flex: 1;
+            min-width: 250px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        /* Backend message display */
+        #api-data {
+            margin-top: 30px;
+            font-weight: bold;
+            color: #333;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div>
+            <h1>ADVENTURE AWAITS</h1>
+            <p>Hello My Name is Madhan, Now im Working in Coimbatore.</p>
+            <br>
+            <a href="#" class="btn">Book Your Trip</a>
+        </div>
+    </header>
+
+    <div class="container">
+        <h2>Popular Destinations</h2>
+
+        <div class="grid">
+            <div class="card"><h3>Mountains</h3><p>Experience the heights of the Alps.</p></div>
+            <div class="card"><h3>Beaches</h3><p>Relax by the crystal clear waters.</p></div>
+            <div class="card"><h3>Forests</h3><p>Get lost in the deep green wild.</p></div>
+        </div>
+
+        <!-- Backend data will appear here -->
+        <div id="api-data">Loading backend message...</div>
+    </div>
+
+    <!-- Backend API Integration -->
+    <script>
+        fetch('/api/message')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('api-data').innerText =
+                    data.message + " | " + data.time;
+            })
+            .catch(err => {
+                document.getElementById('api-data').innerText =
+                    "Error connecting to backend";
+                console.error(err);
+            });
+    </script>
+
+</body>
+</html>
