@@ -10,9 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -21,10 +18,16 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/ubuntu/blue-green
-            git pull origin main
 
-            # Detect active env from nginx
-            CURRENT=$(grep "proxy_pass" /etc/nginx/sites-available/default)
+            echo "Updating code from GitHub..."
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "Latest commit:"
+            git log -1
+
+            # Detect active env from nginx (correct path)
+            CURRENT=$(grep "proxy_pass" /etc/nginx/sites-enabled/default)
 
             if echo "$CURRENT" | grep -q "8081"; then
                 TARGET_ENV="green"
@@ -42,26 +45,24 @@ jobs:
 
             echo "Updating $TARGET_ENV on port $PORT..."
 
-            # ----------- UPDATE TARGET ENV -----------
             cd "$FOLDER"
 
+            # Clean old container & image
             docker rm -f "$CONTAINER" || true
             docker rmi "$IMAGE" || true
 
-            docker build -t "$IMAGE" .
+            # Build fresh image (no cache)
+            docker build --no-cache -t "$IMAGE" .
+
+            # Run new container
             docker run -d -p "$PORT":80 --name "$CONTAINER" "$IMAGE"
 
-            # ----------- ENSURE BOTH CONTAINERS RUNNING -----------
-            echo "Checking both environments..."
+            echo "Ensuring both environments are running..."
 
-            # Check and restart blue if missing
-            if ! docker ps --format '{{.Names}}' | grep -q "^blue-container$"; then
-                docker run -d -p 8081:80 --name blue-container blue-app || echo "Blue image not found, skipping..."
-            fi
+            docker ps --format '{{.Names}}' | grep -q "^blue-container$" || \
+              docker run -d -p 8081:80 --name blue-container blue-app || true
 
-            # Check and restart green if missing
-            if ! docker ps --format '{{.Names}}' | grep -q "^green-container$"; then
-                docker run -d -p 8082:80 --name green-container green-app || echo "Green image not found, skipping..."
-            fi
+            docker ps --format '{{.Names}}' | grep -q "^green-container$" || \
+              docker run -d -p 8082:80 --name green-container green-app || true
 
-            echo "Both environments are now running"
+            echo "Deployment completed successfully"
