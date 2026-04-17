@@ -23,18 +23,21 @@ jobs:
 
             cd /home/ubuntu/blue-green
 
-            echo "🔄 Force syncing latest code from GitHub..."
+            # 🔐 Fix permission issue (safe for repeated runs)
+            git config --global --add safe.directory /home/ubuntu/blue-green
+
+            echo "🔄 Syncing latest code from GitHub..."
             git fetch --all
             git reset --hard origin/main
             git clean -fd
 
-            echo "📌 Latest commit on EC2:"
+            echo "📌 Latest commit:"
             git log -1
 
             # =========================
             # 🔵 BUILD BLUE
             # =========================
-            echo "🔵 Rebuilding BLUE environment..."
+            echo "🔵 Rebuilding BLUE..."
 
             cd /home/ubuntu/blue-green/blue
 
@@ -49,7 +52,7 @@ jobs:
             # =========================
             # 🟢 BUILD GREEN
             # =========================
-            echo "🟢 Rebuilding GREEN environment..."
+            echo "🟢 Rebuilding GREEN..."
 
             cd /home/ubuntu/blue-green/green
 
@@ -62,13 +65,13 @@ jobs:
             echo "✅ GREEN deployed"
 
             # =========================
-            # 🔍 FINAL VERIFICATION
+            # 🔍 VERIFY
             # =========================
             echo "📊 Running containers:"
             docker ps
 
             echo "🌐 Testing endpoints:"
-            curl -s http://localhost:8081 | head -n 5
-            curl -s http://localhost:8082 | head -n 5
+            curl -s http://localhost:8081 | head -n 3
+            curl -s http://localhost:8082 | head -n 3
 
             echo "🎉 Deployment completed successfully!"
