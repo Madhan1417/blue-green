@@ -10,54 +10,53 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@v0.1.10
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ubuntu
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          cd /home/ubuntu/blue-green-Deployment
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-          # Pull latest code
-          git pull origin main
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/blue-green
+            git pull origin main
 
-          # Detect current active port
-          CURRENT=$(grep proxy_pass /etc/nginx/sites-available/default)
+            # Check which port is currently active in Nginx
+            CURRENT=$(grep "proxy_pass" /etc/nginx/sites-available/default)
 
-          if echo "$CURRENT" | grep -q "8081"; then
-              NEW_ENV="green"
-              NEW_PORT=8082
-              OLD_CONTAINER="blue-container"
-              NEW_CONTAINER="green-container"
-              IMAGE="green-app"
-              FOLDER="green"
-          else
-              NEW_ENV="blue"
-              NEW_PORT=8081
-              OLD_CONTAINER="green-container"
-              NEW_CONTAINER="blue-container"
-              IMAGE="blue-app"
-              FOLDER="blue"
-          fi
+            if echo "$CURRENT" | grep -q "8081"; then
+                NEW_ENV="green"
+                NEW_PORT=8082
+                NEW_CONTAINER="green-container"
+                IMAGE="green-app"
+                FOLDER="green"
+            else
+                NEW_ENV="blue"
+                NEW_PORT=8081
+                NEW_CONTAINER="blue-container"
+                IMAGE="blue-app"
+                FOLDER="blue"
+            fi
 
-          echo "Deploying to $NEW_ENV environment..."
+            echo "Deploying to $NEW_ENV on port $NEW_PORT..."
 
-          # Build new image
-          cd $FOLDER
-          docker build -t $IMAGE .
+            cd "$FOLDER"
 
-          # Run new container
-          docker run -d -p $NEW_PORT:80 --name $NEW_CONTAINER $IMAGE
+            # Cleanup old container and image for the target environment
+            docker rm -f "$NEW_CONTAINER" || true
+            docker rmi "$IMAGE" || true
 
-          sleep 5
+            # Build and run the new version
+            docker build -t "$IMAGE" .
+            docker run -d -p "$NEW_PORT":80 --name "$NEW_CONTAINER" "$IMAGE"
 
-          # Update Nginx to new environment
-          sudo sed -i "s|proxy_pass .*|proxy_pass http://localhost:$NEW_PORT;|" /etc/nginx/sites-available/default
+            # Wait for the container to stabilize
+            sleep 5
 
-          sudo systemctl reload nginx
-
-          echo "Switched traffic to $NEW_ENV"
-
-          # Remove old container
-          docker rm -f $OLD_CONTAINER || true
+            # Update Nginx to point to the new port
+            sudo sed -i "s|proxy_pass http://localhost:.*|proxy_pass http://localhost:$NEW_PORT;|" /etc/nginx/sites-available/default
+            
+            # Reload Nginx to apply changes
+            sudo systemctl reload nginx
