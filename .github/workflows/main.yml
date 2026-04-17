@@ -1,4 +1,4 @@
-name: Blue-Green Deployment (Fully Synced)
+name: Blue-Green Deployment (Auto Sync + Clean Rebuild)
 
 on:
   push:
@@ -19,18 +19,24 @@ jobs:
           script: |
             cd /home/ubuntu/blue-green
 
-            echo "Syncing latest code..."
+            echo "🔄 Syncing latest code from GitHub..."
             git fetch origin
             git reset --hard origin/main
 
-            echo "Latest commit:"
+            echo "📌 Latest commit:"
             git log -1
 
-            # 🔥 OPTIONAL: Sync same code to both environments
-            echo "Syncing blue and green folders..."
-            rsync -av --delete ./blue/ ./green/
+            # 🔥 IMPORTANT FIX: Sync root code into both environments
+            echo "📁 Updating blue & green folders..."
 
-            # Detect active env from nginx
+            cp -r index.html blue/index.html
+            cp -r index.html green/index.html
+
+            # (If you have multiple files, use this instead)
+            # cp -r * blue/
+            # cp -r * green/
+
+            # 🔍 Detect active environment from nginx
             CURRENT=$(grep "proxy_pass" /etc/nginx/sites-enabled/default)
 
             if echo "$CURRENT" | grep -q "8081"; then
@@ -47,28 +53,28 @@ jobs:
                 FOLDER="blue"
             fi
 
-            echo "Deploying to $TARGET_ENV..."
+            echo "🚀 Deploying to $TARGET_ENV on port $PORT..."
 
             cd "$FOLDER"
 
-            # 🔥 Clean old container & image
-            docker rm -f "$CONTAINER" 2>/dev/null || echo "No container"
-            docker rmi "$IMAGE" 2>/dev/null || echo "No image"
+            # 🧹 Remove old container & image
+            docker rm -f "$CONTAINER" 2>/dev/null || echo "No old container"
+            docker rmi "$IMAGE" 2>/dev/null || echo "No old image"
 
-            # 🔥 Build fresh image
+            # 🏗️ Build fresh image (NO CACHE)
             docker build --no-cache -t "$IMAGE" .
 
-            # 🔥 Run new container
+            # ▶️ Run container
             docker run -d -p "$PORT":80 --name "$CONTAINER" "$IMAGE"
 
-            echo "Ensuring both environments are running..."
+            echo "🔁 Ensuring both environments are running..."
 
-            # Ensure blue
+            # Ensure blue is running
             docker ps --format '{{.Names}}' | grep -q "^blue-container$" || \
               docker run -d -p 8081:80 --name blue-container blue-app || true
 
-            # Ensure green
+            # Ensure green is running
             docker ps --format '{{.Names}}' | grep -q "^green-container$" || \
               docker run -d -p 8082:80 --name green-container green-app || true
 
-            echo "Deployment completed successfully"
+            echo "✅ Deployment completed successfully"
