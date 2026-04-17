@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -20,7 +23,7 @@ jobs:
             cd /home/ubuntu/blue-green
             git pull origin main
 
-            # Detect which env is currently active (from nginx)
+            # Detect active env from nginx
             CURRENT=$(grep "proxy_pass" /etc/nginx/sites-available/default)
 
             if echo "$CURRENT" | grep -q "8081"; then
@@ -37,18 +40,28 @@ jobs:
                 FOLDER="blue"
             fi
 
-            echo "Updating $TARGET_ENV environment on port $PORT..."
+            echo "Updating $TARGET_ENV on port $PORT..."
 
+            # ----------- UPDATE TARGET ENV -----------
             cd "$FOLDER"
 
-            # Remove ONLY target env container (not both)
             docker rm -f "$CONTAINER" || true
             docker rmi "$IMAGE" || true
 
-            # Build new image
             docker build -t "$IMAGE" .
-
-            # Run container on fixed port
             docker run -d -p "$PORT":80 --name "$CONTAINER" "$IMAGE"
 
-            echo "$TARGET_ENV updated successfully. Nginx not changed."
+            # ----------- ENSURE BOTH CONTAINERS RUNNING -----------
+            echo "Checking both environments..."
+
+            # Check and restart blue if missing
+            if ! docker ps --format '{{.Names}}' | grep -q "^blue-container$"; then
+                docker run -d -p 8081:80 --name blue-container blue-app || echo "Blue image not found, skipping..."
+            fi
+
+            # Check and restart green if missing
+            if ! docker ps --format '{{.Names}}' | grep -q "^green-container$"; then
+                docker run -d -p 8082:80 --name green-container green-app || echo "Green image not found, skipping..."
+            fi
+
+            echo "Both environments are now running"
